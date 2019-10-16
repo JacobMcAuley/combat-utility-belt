@@ -976,6 +976,7 @@ class CUBEnhancedConditions {
      */
     _hookOnPreUpdateToken() {
         Hooks.on("preUpdateToken", (token, sceneId, update) => {
+            if(!this.settings.enhancedConditions || update.effects == undefined) { return }
             this.callingUser = game.userId;
         });
     }
@@ -985,7 +986,7 @@ class CUBEnhancedConditions {
     */
     _hookOnUpdateToken(){
         Hooks.on("updateToken", (token, sceneId, update) => {
-            if(!this.settings.enhancedConditions || game.userId != this.callingUser) { return }
+            if(!this.settings.enhancedConditions || game.userId != this.callingUser || update.effects == undefined) { return }
             //console.log(token,sceneId,update);
             let effects = update.effects;
             
