@@ -74,8 +74,9 @@ class CUBSignal {
         CUBSignal.hookOnRenderSettings();
         CUBSignal.hookOnPreUpdateCombat();
         CUBSignal.hookOnRenderTokenHUD();
+        CUBSignal.hookOnPreUpdateToken();
+        CUBSignal.hookOnUpdateToken();
     }
-
 
     static hookOnInit() {
         Hooks.on("init", () => {
@@ -103,16 +104,34 @@ class CUBSignal {
     }
 
     static hookOnPreUpdateCombat() {
-        //Hooks.on("preUpdateCombat", (combat, update) => {
-            //CUB.rerollInitiative.resetAndReroll(combat, update);
-        //});
+        
     }
 
     static hookOnRenderTokenHUD() {
+        /*
         Hooks.on("renderTokenHUD", (app, html, data) => {
             
         });
+        */
     }
+
+    static hookOnPreUpdateToken() {
+        /*
+        Hooks.on("preUpdateToken", (token, sceneId, update) => {
+
+        });
+        */
+            
+    }
+
+    static hookOnUpdateToken() {
+        /*
+        Hooks.on("preUpdateToken", (token, sceneId, update) => {
+            
+        });
+        */
+    }
+
 }
 
 /**
@@ -538,7 +557,7 @@ class CUBEnhancedConditions {
         this.callingUser = "";
         this._updateStatusIcons();
         this._hookOnPreUpdateToken();
-        this._hookOnUpdateToken();
+        //this._hookOnUpdateToken();
         this._hookOnRenderTokenHUD();
     }
 
@@ -976,14 +995,25 @@ class CUBEnhancedConditions {
      */
     _hookOnPreUpdateToken() {
         Hooks.on("preUpdateToken", (token, sceneId, update) => {
-            if(!this.settings.enhancedConditions || update.effects == undefined) { return }
-            this.callingUser = game.userId;
+            //console.log("conditions pre update token hook called by ", game.userId);
+            if(!this.settings.enhancedConditions || !update.effects) { return }
+            //this.callingUser = game.userId;
+
+            let effects = update.effects;
+            
+            //If the update has effects in it, lookup mapping and set the current token
+            if(effects && effects.length > 0){
+                this.currentToken = token;
+                //this.callingUser = ""
+                return this.lookupEntryMapping(effects);
+            }
         });
     }
 
     /**
     * Hooks on token updates. If the update includes effects, calls the journal entry lookup
     */
+    /*
     _hookOnUpdateToken(){
         Hooks.on("updateToken", (token, sceneId, update) => {
             if(!this.settings.enhancedConditions || game.userId != this.callingUser || update.effects == undefined) { return }
@@ -998,6 +1028,7 @@ class CUBEnhancedConditions {
             }
         });
     }
+    */
 
     /**
      * Adds a title/tooltip with the matched Condition name
@@ -1420,11 +1451,11 @@ class CUBInjuredAndDead {
             deadIcon: CUBSidekick.initGadgetSetting(this.GADGET_NAME + "(" + this.SETTINGS_DESCRIPTORS.DeadIconN + ")", this.SETTINGS_META.deadIcon)
         }
 
-        this.currentActor;
         this.callingUser = "";
         this._hookOnPreUpdateToken();
-        this._hookOnUpdateToken();
-        this._hookOnUpdateActor();
+        //this._hookOnUpdateToken();
+        this._hookOnPreUpdateActor();
+        //this._hookOnUpdateActor();
     }
     
 	get GADGET_NAME() {
@@ -1539,12 +1570,12 @@ class CUBInjuredAndDead {
      */
     _checkTokenHealthState(token, update) {
         const currentHealth = getProperty(token, "actor.data.data." + this.settings.healthAttribute + ".value");
-        const updateHealth = getProperty(update, "actorData.data." + this.settings.healthAttribute + ".value");
+        const updateHealth = update.actorData["data." + this.settings.healthAttribute + ".value"];
         const maxHealth = getProperty(token, "actor.data.data." + this.settings.healthAttribute + ".max");
 
-        if(this._checkForDead(currentHealth)) {
+        if(this._checkForDead(updateHealth)) {
             return CUBButler.HEALTH_STATES.DEAD;
-        } else if(this._checkForInjured(currentHealth, maxHealth)) {
+        } else if(this._checkForInjured(updateHealth, maxHealth)) {
             return CUBButler.HEALTH_STATES.INJURED;
         }
     }
@@ -1556,12 +1587,12 @@ class CUBInjuredAndDead {
      */
     _checkActorHealthState(actor, update) {
         const currentHealth = getProperty(actor, "data.data." + this.settings.healthAttribute + ".value");
-        const updateHealth = getProperty(update, "data." + this.settings.healthAttribute + ".value");
+        const updateHealth = update["data." + this.settings.healthAttribute + ".value"];
         const maxHealth = getProperty(actor, "data.data." + this.settings.healthAttribute + ".max");
 
-        if (this._checkForDead(currentHealth)) {
+        if (this._checkForDead(updateHealth)) {
             return CUBButler.HEALTH_STATES.DEAD;
-        } else if(this._checkForInjured(currentHealth, maxHealth)) {
+        } else if(this._checkForInjured(updateHealth, maxHealth)) {
             return CUBButler.HEALTH_STATES.INJURED;
         }
     }
@@ -1653,7 +1684,47 @@ class CUBInjuredAndDead {
      */
     _hookOnPreUpdateToken() {
         Hooks.on("preUpdateToken", (token, sceneId, update) => {
-            this.callingUser = game.userId;
+
+            //const healthUpdate = update.actorData["data." + this.settings.healthAttribute + ".value"];
+            if(token.data.actorLink || !update.actorData || (update.actorData && !hasProperty(expandObject(update),"actorData.data." + this.settings.healthAttribute + ".value"))) { return }
+            let tokenHealthState;
+
+            if(this.settings.injured || this.settings.dead) {
+                tokenHealthState = this._checkTokenHealthState(token, update);
+
+                if(tokenHealthState == CUBButler.HEALTH_STATES.DEAD) {
+                    this._markDead(token);
+                } else if (tokenHealthState == CUBButler.HEALTH_STATES.INJURED) {
+                    this._markInjured(token);
+                } else {
+                    this._markHealthy(token);
+                }
+            }
+        });
+    }
+
+    _hookOnPreUpdateActor() {
+        Hooks.on("preUpdateActor", (actor, update) => {
+            const healthUpdate = update["data." + this.settings.healthAttribute + ".value"];
+            const activeToken = canvas.tokens.placeables.find(t => t.actor.id == actor.id);
+
+            if(healthUpdate == undefined || (!this.settings.dead && !this.settings.injured) || activeToken == undefined) { return }
+
+            const healthState = this._checkActorHealthState(actor, update);
+            
+            if(activeToken == undefined) { return }
+
+            switch (healthState) {
+                case CUBButler.HEALTH_STATES.DEAD:
+                    this._markDead(activeToken);
+                    break;
+                case CUBButler.HEALTH_STATES.INJURED :
+                    this._markInjured(activeToken);
+                    break;
+                default:
+                    this._markHealthy(activeToken);
+                    break;
+            }
         });
     }
 
@@ -1664,8 +1735,8 @@ class CUBInjuredAndDead {
      */
     _hookOnUpdateToken() {
         Hooks.on("updateToken", (token, sceneId, update) => {
-            const healthUpdate = getProperty(update, "actorData.data." + this.settings.healthAttribute + ".value");
-            if(game.userId != this.callingUser || healthUpdate == undefined || token.data.actorLink) { return }
+            //const healthUpdate = if(update.actorData && getProperty(update.actorData, "data." + this.settings.healthAttribute + ".value") { return true };
+            if(game.userId != this.callingUser || (update.actorData && getProperty(update.actorData, "data." + this.settings.healthAttribute + ".value")) || token.data.actorLink) { return }
 
             let tokenHealthState;
 
@@ -1690,7 +1761,7 @@ class CUBInjuredAndDead {
      * check the health state of the actor,
      * then mark the active token appropriately
      */
-   _hookOnUpdateActor() {
+    _hookOnUpdateActor() {
         Hooks.on("updateActor", (actor, update) => {
             const healthUpdate = update["data." + this.settings.healthAttribute + ".value"];
             const activeToken = canvas.tokens.placeables.find(t => t.actor.id == actor.id);
