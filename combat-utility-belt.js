@@ -1686,18 +1686,37 @@ class CUBInjuredAndDead {
         Hooks.on("preUpdateToken", (token, sceneId, update) => {
 
             //const healthUpdate = update.actorData["data." + this.settings.healthAttribute + ".value"];
-            if(token.data.actorLink || !update.actorData || (update.actorData && !hasProperty(expandObject(update),"actorData.data." + this.settings.healthAttribute + ".value"))) { return }
+            if(token.data.actorLink || (update.actorData && !hasProperty(expandObject(update),"actorData.data." + this.settings.healthAttribute + ".value"))) { return }
             let tokenHealthState;
 
             if(this.settings.injured || this.settings.dead) {
                 tokenHealthState = this._checkTokenHealthState(token, update);
 
                 if(tokenHealthState == CUBButler.HEALTH_STATES.DEAD) {
-                    this._markDead(token);
+                    update.effects = [];
+                    update.overlayEffect = this.settings.deadIcon;
+                    //this._markDead(token);
                 } else if (tokenHealthState == CUBButler.HEALTH_STATES.INJURED) {
-                    this._markInjured(token);
+                    if(update.effects instanceof Array) {
+                        update.effects.push(this.settings.injuredIcon);
+                    } else {
+                        update.effects = [this.settings.injuredIcon];
+                    }
+                    
+                    if(token.data.overlayEffect == this.settings.deadIcon) {
+                        update.overlayEffect = "";
+                    }
+                    //this._markInjured(token);
+                    
                 } else {
-                    this._markHealthy(token);
+                    if(token.data.effects instanceof Array && token.data.effects.find(e => e == this.settings.injuredIcon)) {
+                        update.effects = token.data.effects.splice(token.data.effects.indexOf(this.settings.injuredIcon), 1);
+                    }
+
+                    if(token.data.overlayEffect == this.settings.deadIcon) {
+                        update.overlayEffect = "";
+                    }
+                    //this._markHealthy(token);
                 }
             }
         });
