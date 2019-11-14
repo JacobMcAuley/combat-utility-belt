@@ -83,8 +83,8 @@ class CUBSignal {
         CUBSignal.hookOnPreDeleteCombat();
         CUBSignal.hookOnRenderCombatTracker();
         CUBSignal.hookOnRenderChatMessage();
+        CUBSignal.hookOnRenderImagePopout();
     }
-
 
     static hookOnInit() {
         Hooks.on("init", () => {
@@ -179,6 +179,12 @@ class CUBSignal {
     static hookOnRenderChatMessage() {
         Hooks.on("renderChatMessage", (message, data, html) => {
             CUB.hideNPCNames._hookOnRenderChatMessage(message, data, html);
+        });
+    }
+
+    static hookOnRenderImagePopout() {
+        Hooks.on("renderImagePopout", (app, html, data) => {
+            CUB.hideNPCNames._hookOnRenderImagePopout(app, html, data);
         });
     }
 }
@@ -540,6 +546,28 @@ class CUBHideNPCNames {
             });
         }
         //console.log(message,data,html);
+    }
+
+    /**
+     * Hook on render of the artwork popout and replace the name
+     */
+    _hookOnRenderImagePopout(app, html, data) {
+        //Killswitch logic - if the user is the GM we don't want to go any further
+        if (game.user.isGM || !this.settings.hideNames) {
+            return;
+        }
+
+        const isPC = getProperty(app, "options.entity.data.isPC");
+
+        if (!isPC) {
+            const windowTitle = html.find(".window-title");
+            const npcName = getProperty(app, "options.entity.data.name");
+            const replacement = this.settings.unknownCreatureString || " ";
+            html.find(`:contains('${npcName}')`).each((i, el) => {
+                el.innerHTML = el.innerHTML.replace(new RegExp(npcName, "g"), replacement);
+            });
+        }
+
     }
 
     _switchTabs() {
